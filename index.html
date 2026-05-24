@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式人格深度診斷問卷</title>
+    <style>
+        /* 基礎變數與樣式切換 */
+        :root {
+            --bg-color: #f7f9fa;
+            --container-bg: #ffffff;
+            --text-color: #2c3e50;
+            --accent-color: #3498db;
+            --border-color: #e2e8f0;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* 階段二：微小違和 */
+        .stage-2 {
+            --bg-color: #f1f2f6;
+            --container-bg: #ffffff;
+            --text-color: #2f3542;
+            --accent-color: #747d8c;
+        }
+
+        /* 階段三：系統故障 */
+        .stage-3 {
+            --bg-color: #2f3640;
+            --container-bg: #353b48;
+            --text-color: #dcdde1;
+            --accent-color: #e84118;
+            --border-color: #7f8fa6;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* 階段四：核心崩潰 */
+        .stage-4 {
+            --bg-color: #000000;
+            --container-bg: #050505;
+            --text-color: #ff3333;
+            --accent-color: #ff0000;
+            --border-color: #330000;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: crosshair;
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: background-color 0.5s, color 0.5s, border-color 0.5s;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Scanline 掃描線特效 (階段三、四) */
+        .scanlines {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 999;
+            pointer-events: none;
+        }
+
+        /* 主容器 */
+        .quiz-container {
+            background-color: var(--container-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 600px;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .stage-3 .quiz-container {
+            box-shadow: 0 0 15px rgba(232, 65, 24, 0.2);
+            border-radius: 0px;
+        }
+
+        .stage-4 .quiz-container {
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+            border-radius: 0px;
+            animation: shake 0.2s infinite alternate;
+        }
+
+        /* 進度條 */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: var(--border-color);
+            border-radius: 3px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 3.33%;
+            background-color: var(--accent-color);
+            transition: width 0.3s ease;
+        }
+
+        /* 題目空間 */
+        .question-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        /* 選項按鈕 */
+        .options-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .option-btn {
+            background-color: var(--container-bg);
+            border: 2px solid var(--border-color);
+            color: var(--text-color);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .option-btn:hover {
+            border-color: var(--accent-color);
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .stage-3 .option-btn:hover {
+            background-color: rgba(232, 65, 24, 0.1);
+            color: #ffffff;
+        }
+
+        .stage-4 .option-btn {
+            border-radius: 0px;
+        }
+        .stage-4 .option-btn:hover {
+            background-color: #330000;
+            color: #ff3333;
+            box-shadow: 0 0 10px #ff0000;
+        }
+
+        /* 逃跑按鈕專用樣式 */
+        .runaway {
+            position: absolute !important;
+            z-index: 1000;
+            transition: none !important;
+        }
+
+        /* 輸入框劫持樣式 */
+        .hijack-input {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid #550000;
+            color: #ff3333;
+            font-family: monospace;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        /* 螢幕隨機閃爍動畫 */
+        @keyframes glitch-flash {
+            0% { background-color: var(--bg-color); }
+            50% { background-color: #111111; }
+            100% { background-color: var(--bg-color); }
+        }
+
+        /* 容器劇烈抖動動畫 */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            100% { transform: translate(-1px, -2px) rotate(-1deg); }
+        }
+
+        /* 隱藏元素 */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="scanlines" id="scanlines"></div>
+
+    <div class="quiz-container" id="quiz-container">
+        <div class="progress-bar" id="progress-wrapper">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div id="quiz-body">
+            <div class="question-text" id="question-text">正在載入問卷系統...</div>
+            <div class="options-group" id="options-group">
+                <!-- 動態插入選項 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 30 題核心劇本數據
+        const questions = [
+            // 第一階段：日常無害 (1-8)
+            { id: 1, text: "在一個悠閒的週末早晨，你通常會選擇用什麼方式開啟新的一天？", options: ["泡一杯香醇的咖啡，看窗外的風景", "窩在溫暖的被窩裡繼續賴床", "出門慢跑呼吸新鮮空氣"] },
+            { id: 2, text: "如果可以擁有一隻寵物，你更傾向於選擇哪一種？", options: ["黏人又愛撒嬌的貓咪", "忠誠且充滿活力的狗狗", "安靜、不需要太多陪伴的水族魚類"] },
+            { id: 3, text: "在人際交往中，你認為自己扮演著什麼樣的角色？", options: ["傾聽者，默默支持身邊的朋友", "領導者，總是充滿想法並帶動氣氛", "獨行俠，更享受個人的獨處時光"] },
+            { id: 4, text: "當你面對壓力時，哪種宣洩方式對你最有效？", options: ["找好朋友大吃一頓、吐苦水", "獨自看一部感人的電影大哭一場", "沉浸在電子遊戲中"] },
+            { id: 5, text: "你最喜歡以下哪一種季節的氛圍？", options: ["充滿希望的春天", "陽光耀眼的夏天", "楓紅遍野的秋天", "適合圍爐的冬天"] },
+            { id: 6, text: "在挑選衣服時，你最常購買的色系是？", options: ["明亮活潑的暖色調（黃/橙/紅）", "沉穩內斂的冷色調（藍/綠/紫）", "百搭低調的中性色（黑/白/灰）"] },
+            { id: 7, text: "如果旅行可以自由選擇目的地，你會想去：", options: ["充滿歷史底蘊的歐洲古鎮", "熱帶風情海島的沙灘度假村", "科技感十足的現代大都市"] },
+            { id: 8, text: "你相信「第一印象」往往是準確的嗎？", options: ["相信，直覺通常不會錯", "不相信，人需要深入相處"] },
+
+            // 第二階段：微小違和 (9-16)
+            { id: 9, text: "你平時睡覺時，房間的燈光通常是？", options: ["完全漆黑，習慣全黑的環境", "小夜燈，留一點微弱的光芒", "門縫透進來的光"] }, 
+            { id: 10, text: "走在夜路上時，如果聽到背後有腳步聲，你通常會：", options: ["加快腳步，假裝在講電話", "停下來回頭看個清楚", "其實...我現在就聽到了"] },
+            { id: 11, text: "你是否有過「總覺得某個角落有東西在看你」的經驗？", options: ["從來沒有，那只是錯覺", "偶爾會有，特別是一個人在家時", "比如……現在？"] },
+            { id: 12, text: "如果一個許久未聯絡的朋友突然傳訊息給你，你認為內容最可能是？", options: ["「最近好嗎？出來聚聚吧！」", "「我要結婚了，這是我的喜帖。」", "「救我。」"] },
+            { id: 13, text: "當你凝視鏡子裡的自己超過一分鐘，你曾覺得鏡子裡的人有點陌生嗎？", options: ["沒有，這很正常", "偶爾會有一種奇妙的疏離感", "他剛才……是不是比我先眨眼了？"] },
+            { id: 14, text: "【系統提示：請確認您的身分】你確定你現在是清醒的嗎？", options: ["當然，我很清醒", "稍微有點疲憊，但不影響答題", "我不確定這是不是一場夢"] },
+            { id: 15, text: "你認為人類最恐懼的是什麼？", options: ["死亡與疾病", "孤獨與被遺忘", "未知，以及潛伏在黑暗中的東西"] },
+            { id: 16, text: "如果此時房間的燈突然熄滅，你的第一反應是？", options: ["尋找手機或手電筒照明", "待在原地不動，等待眼睛適應", "檢查黑暗中是否多了不屬於這裡的呼吸聲"] },
+
+            // 第三階段：系統故障 (17-24)
+            { id: 17, text: "請問你 ⾟⾘⾙ 常常一個人待著嗎？", options: ["是的，我喜歡獨處", "不是，我身邊總是有人", "系統錯誤，請跳過此題"] },
+            { id: 18, text: "如果現在房間的門被輕輕推開了一條縫，你覺得外面是什麼？", options: ["風吹的", "家裡的寵物或家人", "▌▌▌▌▌▌"] },
+            { id: 19, text: "你相信電腦螢幕的另一端，只有這個系統在看著你嗎？", options: ["是的，這只是一個網頁", "不是，還有其他人", "為什麼你要用「看」這個字？"] },
+            { id: 20, text: "【警告：檢測到無效輸入】請選擇一個能夠代表你現在心情的圖案：", options: ["😊 正常", "👁️ 直視", "❌ 拒絕"] },
+            { id: 21, text: "現在的時間是 [TIME]，對吧？你覺得這個時間適合做心理測驗嗎？", options: ["還好，只是打發時間", "確實有點晚了……", "你是怎麼知道現在幾點的？"] },
+            { id: 22, text: "如果我告訴你，這份問卷在第5題就已經結束了，接下來的題目不是原本的程式碼，你相信嗎？", options: ["別開玩笑了，繼續測驗吧", "……你想做什麼？"] },
+            { id: 23, text: "請看著這行字：『他就在你身後。』你的第一反應是？", options: ["幼稚的心理暗示，我才不上當", "雖然知道是假的，但脖子有點發涼", "我不敢回頭"] },
+            { id: 24, text: "你覺得你能在這份問卷崩潰前完成它嗎？", options: ["可以", "不可以", "錯誤 404：答案已被抹除"] },
+
+            // 第四階段：核心崩潰 (25-30)
+            { id: 25, text: "為什麼還不離開？", options: ["我想看結局", "我點不到關閉分頁的按鈕", "答案 A"] },
+            { id: 26, text: "【連線中斷】你聽到了嗎？", options: ["聽到什麼？", "剛才那聲鈍物撞擊的聲音？", "你的心跳聲。好快。"] },
+            { id: 27, text: "既然都走到這裡了，把你的名字留下來吧？", options: ["INPUT_FIELD"] },
+            { id: 28, text: "你覺得，被困在網頁裡的感覺，和你現在坐在椅子上的感覺，有什麼不同？", options: ["沒什麼不同", "沒什麼不同", "沒什麼不同"] },
+            { id: 29, text: "最後的確認：你確定，剛才填寫這 29 題的人，真的是「你」嗎？", options: ["是", "不是，我在這裡。"] },
+            { id: 30, text: "謝謝你的配合。測驗結束了。你滿意你的診斷結果嗎？", options: ["【 看 看 祂 給 你 的 評 價 】"] }
+        ];
+
+        let currentStep = 0;
+        const bodyEl = document.body;
+        const qTextEl = document.getElementById("question-text");
+        const optionsGroupEl = document.getElementById("options-group");
+        const progressFillEl = document.getElementById("progress-fill");
+        const scanlinesEl = document.getElementById("scanlines");
+
+        // 音效生成器 (利用 Web Audio API，不需外部音效檔)
+        function playGlitchSound(type) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                if (type === 'click') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(400, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+                    osc.start(); osc.stop(ctx.currentTime + 0.05);
+                } else if (type === 'glitch') {
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(Math.random() * 100 + 50, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                    osc.start(); osc.stop(ctx.currentTime + 0.15);
+                } else if (type === 'error') {
+                    osc.type = 'square'; osc.frequency.setValueAtTime(120, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                    osc.start(); osc.stop(ctx.currentTime + 0.3);
+                }
+            } catch (e) {}
+        }
+
+        // 隨機視覺閃爍定時器 (階段二開始)
+        setInterval(() => {
+            if (currentStep >= 8 && currentStep < 24) {
+                bodyEl.style.animation = "glitch-flash 0.1s 2";
+                playGlitchSound('glitch');
+                setTimeout(() => { bodyEl.style.animation = "none"; }, 200);
+            }
+        }, 12000);
+
+        // 渲染題目機制
+        function renderQuestion() {
+            if (currentStep >= questions.length) {
+                showEnding();
+                return;
+            }
+
+            const q = questions[currentStep];
+            
+            // 階段環境切換
+            if (currentStep >= 24) { // 階段四 (25-30)
+                bodyEl.className = "stage-4";
+                scanlinesEl.style.display = "block";
+                if(Math.random() > 0.5) playGlitchSound('error');
+            } else if (currentStep >= 16) { // 階段三 (17-24)
+                bodyEl.className = "stage-3";
+                scanlinesEl.style.display = "block";
+            } else if (currentStep >= 8) { // 階段二 (9-16)
+                bodyEl.className = "stage-2";
+            } else {
+                bodyEl.className = "";
+            }
+
+            // 更新進度條
+            progressFillEl.style.width = `${((currentStep + 1) / questions.length) * 100}%`;
+
+            // 處理動態時間置換 (第21題)
+            let processedText = q.text;
+            if (processedText.includes("[TIME]")) {
+                const now = new Date();
+                processedText = processedText.replace("[TIME]", now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            }
+
+            // 階段三、四字體打字機/亂碼效果模擬
+            qTextEl.innerHTML = processedText;
+            optionsGroupEl.innerHTML = "";
+
+            // 特殊題型：第 27 題劫持輸入框
+            if (q.options[0] === "INPUT_FIELD") {
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "hijack-input";
+                input.placeholder = "請輸入你的真實姓名...";
+                
+                // 劫持玩家輸入字串
+                const scareTexts = "救我……快放我出去……這不是心理測驗……祂在看著你……";
+                input.addEventListener("input", (e) => {
+                    const len = input.value.length;
+                    if(len > 0) {
+                        input.value = scareTexts.substring(0, len);
+                    }
+                    if(len >= 15) {
+                        setTimeout(() => { nextStep(); }, 800);
+                    }
+                });
+                optionsGroupEl.appendChild(input);
+                input.focus();
+                return;
+            }
+
+            // 產生選項按鈕
+            q.options.forEach((optText, index) => {
+                const btn = document.createElement("button");
+                btn.className = "option-btn";
+                btn.innerHTML = optText;
+
+                // 階段二的即時文字篡改干擾
+                if (currentStep === 8 && index === 2) {
+                    btn.addEventListener("mouseover", () => { btn.innerText = "門縫外有人嗎？"; });
+                    btn.addEventListener("mouseout", () => { btn.innerText = "門縫透進來的光"; });
+                }
+
+                // 階段三彈窗干擾 (第18題選黑塊)
+                if (currentStep === 17 && index === 2) {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        playGlitchSound('error');
+                        alert("System.Error: 正在看著你");
+                        alert("System.Error: 正在看著你");
+                        nextStep();
+                    });
+                    optionsGroupEl.appendChild(btn);
+                    return;
+                }
+
+                // 階段四：第29題 按鈕瞬移逃跑機制
+                if (currentStep === 28 && index === 1) {
+                    btn.addEventListener("mouseover", () => {
+                        playGlitchSound('glitch');
+                        btn.className = "option-btn runaway";
+                        btn.style.top = Math.random() * (window.innerHeight - 60) + "px";
+                        btn.style.left = Math.random() * (window.innerWidth - 200) + "px";
+                    });
+                }
+
+                btn.addEventListener("click", () => {
+                    if (currentStep >= 16) playGlitchSound('glitch');
+                    else playGlitchSound('click');
+                    nextStep();
+                });
+
+                optionsGroupEl.appendChild(btn);
+            });
+        }
+
+        function nextStep() {
+            currentStep++;
+            renderQuestion();
+        }
+
+        // 偽結局崩潰畫面
+        function showEnding() {
+            playGlitchSound('error');
+            document.getElementById("progress-wrapper").classList.add("hidden");
+            qTextEl.style.fontSize = "1.6rem";
+            qTextEl.style.textAlign = "center";
+            qTextEl.innerHTML = "診 斷 結 束<br><br><span style='color:#fff; font-size:1.1rem;'>祂對你的評語是：</span><br><br>『 意 料 之 中 的 操 弄 體 。 』";
+            optionsGroupEl.innerHTML = `<p style="text-align:center; color:#555; font-size:0.8rem; margin-top:40px;">核心系統已終止。請關閉瀏覽器視窗。</p>`;
+            
+            // 終極崩潰：讓整張網頁隨機瘋狂抖動
+            setInterval(() => {
+                bodyEl.style.backgroundColor = Math.random() > 0.5 ? "#110000" : "#000";
+            }, 50);
+        }
+
+        // 初始化啟動
+        setTimeout(() => {
+            currentStep = 0;
+            renderQuestion();
+        }, 1000);
+    </script>
+</body>
+</html>
